@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from sklearn.neural_network import MLPRegressor as mlp
-from IPython.display import display
+# from IPython.display import display
 
 # import warnings
 # warnings.filterwarnings('ignore')
@@ -30,6 +30,7 @@ stories = pickle.load(open(file_name, 'rb'))
 # conda install -c conda-forge spacy
 # this is what worked for me :P
 
+# uncomment the next two lines if model data cannot be located
 # !python -m spacy download en
 # !python -m spacy download en_core_web_lg
 
@@ -220,6 +221,7 @@ result['5'] = np.zeros(9)
 # for different summary lengths
 
 count = 0
+all_summaries = []
 
 while count < min(doc_count, limit):
     X_doc = []
@@ -267,6 +269,9 @@ while count < min(doc_count, limit):
         scores = rouge.get_scores(generated_summary, gold_summary)[0]
         result[str(k)] += extract_rouge(scores)
 
+    summary_eval = {'doc': data['story_text'], 'gen_summ': generated_summary, 'true_summ': gold_summary}
+    all_summaries.append(summary_eval)
+
     count += 1
 
 for k in [3, 4, 5]:
@@ -298,5 +303,22 @@ display(df)
 
 # save results into a dataframe file
 df.to_csv(model_name + '_results.csv')
+
+# verifying creation of summaries
+# uncomment to display the first summary
+# print(all_summaries[0])
+
+filename = model_name + 'summaries_eval.pickle'
+# dumping summaries into a pickle file for further loading and evaluation
+with open(filename, 'wb') as f:
+    pickle.dump(all_summaries, f)
+
+# verifying pickled file
+
+pickle_in = open(filename, "rb")
+eval_summ = pickle.load(pickle_in)
+
+# uncomment to display the second summary
+# print(all_summaries[1])
 
 # ^_^ Thank You
