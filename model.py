@@ -2,6 +2,7 @@ import pickle
 import spacy
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 from sklearn.neural_network import MLPRegressor as mlp
 from IPython.display import display
 
@@ -11,8 +12,8 @@ from IPython.display import display
 # !pip install rouge
 from rouge import Rouge
 
-from google.colab import drive
-drive.mount('/content/drive')
+# from google.colab import drive
+# drive.mount('/content/drive')
 
 # change to path to dataset
 file_name = "/content/drive/My Drive/Summarization_Pickled_Data/cnn_dataset_1000_labelled.pkl"
@@ -20,7 +21,9 @@ stories = pickle.load(open(file_name, 'rb'))
 
 # displaying the first datapoint
 # verify correctness of load
-print(stories[0])
+
+# Uncomment to Display the First Datapoint
+# print(stories[0])
 
 # Required Models for glove
 # in case of errors with conda, use this:
@@ -29,6 +32,7 @@ print(stories[0])
 
 # !python -m spacy download en
 # !python -m spacy download en_core_web_lg
+
 # !python -m spacy link en_core_web_lg en --force
 
 # use the large model as the default model for English textual data
@@ -57,9 +61,8 @@ def make_set(start_index, size):
     X_set = []
     y_set = []
 
-    while count < size:
+    for count in tqdm(range(size)):
         data = stories[start_index + count]
-        count += 1
 
         doc_emb = get_embedding(data['story_text'])
         # use the function of choice to generate the document embedding
@@ -94,21 +97,25 @@ def get_loss(pred, y):
 model_name = "glove_averaged"
 # modify the model name
 
-def train(X_train, y_train):
-    model = mlp(hidden_layer_sizes = (1024, 2048, 1024, 512, 512, 256, 128), max_iter = 1000)
-    
-    train_size = np.shape(X_train)[0]
-
-    batch_size = int(np.sqrt(train_size))
-    n_batches = int(4 * (train_size / batch_size))
+def make_parameters(train_size):
+    batch_size = int(4 * np.sqrt(train_size))
+    n_batches = int(32 * (train_size / batch_size))
+    # can set batch_size to standard values such as 64, 128, 256
 
     print("Total Number of Training Examples: " + str(train_size))
     print("Batch Size: " + str(batch_size))
     print("Number of Batches: " + str(n_batches))
 
+    return batch_size, n_batches
+
+def train(X_train, y_train, batch_size, n_batches):
+    model = mlp(hidden_layer_sizes = (1024, 2048, 1024, 512, 256, 256, 128, 64), max_iter = 10000)
+    
+    train_size = np.shape(X_train)[0]
+
     min_loss = 1e20
 
-    while(n_batches > 0):
+    for iterator in tqdm(range(n_batches)):
         idx = np.random.randint(0, train_size, size = batch_size)
 
         X_select = X_train[idx,:]
@@ -125,12 +132,12 @@ def train(X_train, y_train):
             min_loss = loss
             pickle.dump(model, open(model_name + '_best_model', 'wb'))
 
-        n_batches -= 1
-
     final_model = pickle.load(open(model_name + '_best_model', 'rb'))
     return final_model
 
-m = train(X_train, 1000 * y_train)
+batch_size, n_batches = make_parameters(train_size)
+
+m = train(X_train, 1000 * y_train, batch_size, n_batches)
 
 # Hyperparameter for similarity threshold
 theta = 0.95
@@ -139,7 +146,15 @@ def similarity(A, B):
     similarity =  (A @ B.T) / (np.linalg.norm(A) * np.linalg.norm(B))
     return similarity
 
-def get_top_4(X_doc, y):
+def get_top_k(X_doc, y, k):
+    # k should be in {3, 4, 5}
+    # error handling
+    k = int(k)
+    if k > 5:
+        k = 5
+    elif k < 3:
+        k = 3
+    
     order = np.flip(np.argsort(y))
     sentence_set = []
     for sent_id in order:
@@ -156,7 +171,7 @@ def get_top_4(X_doc, y):
 
         if flag == 1:
             sentence_set.append(sent_id)
-    return sentence_set[0: min(4, len(sentence_set))]
+    return sentence_set[0: min(k, len(sentence_set))]
 
 # Creating object of the ROUGE class
 rouge = Rouge()
@@ -192,12 +207,17 @@ start_doc_id = train_size + val_size
 doc_count = len(stories)
 
 generated_summary, gold_summary = 0, 0
+# to access the final created summary
 
 # set the number of documents for testing
 limit = test_size
 
-total = np.zeros(9)
-# averaging the 9 ROUGE Metrics
+result = {}
+result['3'] = np.zeros(9)
+result['4'] = np.zeros(9)
+result['5'] = np.zeros(9)
+# averaging the ROUGE Metrics
+# for different summary lengths
 
 count = 0
 
@@ -232,22 +252,25 @@ while count < min(doc_count, limit):
     # Uncomment to view the test_loss on the sample  
     # print(loss)
 
-    summary_sent_id = get_top_4(X_doc, sentence_predicted_scores)
-    # Uncomment to view the indices of chosen sentences
-    # print("Document ID:", start_doc_id + count, ", Top 5 Sentences:", summary_sent_id)
-
-    # Uncomment to view the top 10 sentences based on Gold Labels
-    # print("Top 10 sentences based on Gold Label", np.ndarray.tolist(np.flip(np.argsort(y_doc))[0:10]))
-
     gold_summary = join(data['highlights'])
-    generated_summary = join([data['story'][idx] for idx in summary_sent_id])
 
-    scores = rouge.get_scores(generated_summary, gold_summary)[0]
-    total += extract_rouge(scores)
+    for k in [3, 4, 5]:
+        summary_sent_id = get_top_k(X_doc, sentence_predicted_scores, k)
+        # Uncomment to view the indices of chosen sentences
+        # print("Document ID:", start_doc_id + count, ", Top 5 Sentences:", summary_sent_id)
+
+        # Uncomment to view the top 10 sentences based on Gold Labels
+        # print("Top 10 sentences based on Gold Label", np.ndarray.tolist(np.flip(np.argsort(y_doc))[0:10]))
+
+        generated_summary = join([data['story'][idx] for idx in summary_sent_id])
+
+        scores = rouge.get_scores(generated_summary, gold_summary)[0]
+        result[str(k)] += extract_rouge(scores)
 
     count += 1
 
-averaged = total / test_size
+for k in [3, 4, 5]:
+    result[str(k)] = result[str(k)] / test_size
 
 predicted = get_values(X_test, m)
 test_loss = get_loss(y_test, predicted)
@@ -257,18 +280,20 @@ print("Document:\n", stories[-1]['story_text'])
 print("Generated Summary:\n", generated_summary)
 print("Gold Summary:\n", gold_summary)
 
-print("All Metrics:")
+print("\nAll Metrics:\n")
 
-lst = np.ndarray.tolist(averaged)
-lst.append(test_loss)
+data = []
+for k in [3, 4, 5]:
+    lst = np.ndarray.tolist(result[str(k)])
+    lst.append(test_loss)
+    data.append(lst)
 
-print()
-
-df = pd.DataFrame([lst], columns = ['R1-f', 'R1-p', 'R1-r',
+df = pd.DataFrame(data, columns = ['R1-f', 'R1-p', 'R1-r',
                                     'R2-f', 'R2-p', 'R2-r',
                                     'Rl-f', 'Rl-p', 'Rl-r',
-                                    'Test Regression Loss'], dtype = float)
-df.index = ['Averaged Glove Vectors']
+                                    'Loss'], dtype = float)
+
+df.index = ['glove top-3', 'glove top-4', 'glove top-5']
 display(df)
 
 # save results into a dataframe file
