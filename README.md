@@ -1,5 +1,7 @@
 # Summarization
 
+### A light-weight Extractive Summarization Formulation for the CNN Dataset
+
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/sayarghoshroy/Summarization/blob/master/summarization_model.ipynb)
 
 ---
@@ -15,5 +17,11 @@
 #### For Pre-processed and Labelled CNN Datasets, go [here](https://drive.google.com/drive/folders/1hNik2G9hdFf1NlnADgxxAxwrQEmDoEyq?usp=sharing).
 
 #### Trained Models and Corresponding Results can be downloaded from [here](https://drive.google.com/drive/folders/1PkA6NmDP9G4f_rYlsKwvdSuO5jsDU2jW?usp=sharing).
+
+---
+
+<p align="center">
+  <img src="https://github.com/sayarghoshroy/Summarization/blob/master/model_diagrams/regressor.jpg" width="35%">
+</p>
 
 ---
